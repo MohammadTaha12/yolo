@@ -1,63 +1,63 @@
 import cv2
-from yolov5 import YOLOv5
+import torch
+from ultralytics import YOLO
 import time
 
-# Load the YOLOv5 model
-model = YOLOv5("yolov5s.pt", device="cpu")  # Replace "cpu" with "cuda" if using a GPU
+# تحميل نموذج YOLOv5
+model = YOLO("yolov5s.pt")
 
-# Open the camera
-cap = cv2.VideoCapture(0)  # 0 for the default camera
+# فتح الكاميرا
+cap = cv2.VideoCapture(0)
 
-# Check if the camera is opened successfully
+# التحقق من تشغيل الكاميرا بنجاح
 if not cap.isOpened():
     print("Error: Could not open the camera. Please check the connection.")
+    exit()
 else:
     print("Camera opened successfully.")
 
-# Initialize the timer
+# مؤقت لتنفيذ الكشف كل 3 ثوانٍ
 last_capture_time = time.time()
 
 while True:
-    # Read a frame from the camera
+    # التقاط إطار من الكاميرا
     ret, frame = cap.read()
     if not ret:
         print("Error: Could not read frame from the camera.")
         break
 
-    # Check if 3 seconds have passed since the last capture
+    # تنفيذ الكشف كل 3 ثوانٍ
     current_time = time.time()
-    if current_time - last_capture_time >= 3:  # Every 3 seconds
-        # Update the last capture time
-        last_capture_time = current_time
+    if current_time - last_capture_time >= 3:
+        last_capture_time = current_time  # تحديث المؤقت
+        
+        # تنفيذ YOLO على الإطار
+        results = model(frame)
 
-        # Detect vehicles in the frame
-        results = model.predict(frame)
-
-        # Count the detected vehicles
+        # عدّ السيارات المكتشفة فقط
         car_count = 0
-        for detection in results.pred[0]:
-            class_id = int(detection[5])  # Class ID
-            if class_id == 2:  # Class ID 2 represents cars in the COCO dataset
-                car_count += 1
+        for result in results:
+            for box in result.boxes:
+                class_id = int(box.cls[0])  # الحصول على رقم الفئة
+                if class_id == 2:  # الفئة 2 تمثل السيارات في COCO
+                    car_count += 1
+                    # استخراج إحداثيات الصندوق المحيط
+                    x1, y1, x2, y2 = map(int, box.xyxy[0])
+                    # رسم مستطيل حول السيارة
+                    cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 255, 0), 2)
+                    # إضافة اسم الفئة فوق المستطيل
+                    cv2.putText(frame, "Car", (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
 
-        # Display the number of detected vehicles
-        print(f"Number of vehicles detected: {car_count}")
+        # طباعة عدد السيارات المكتشفة
+        print(f"🚗 Number of cars detected: {car_count}")
 
-        # Display the frame with detection results
-        results.show()
+    # عرض الإطار مع الكشف عن السيارات
+    cv2.imshow("Car Detection", frame)
 
-        # Save the frame as an image (optional)
-        output_image_path = f"output/frame_{int(current_time)}.jpg"  # Replace with your save path
-        cv2.imwrite(output_image_path, frame)
-        print(f"Frame saved as: {output_image_path}")
-
-    # Display the frame in a window
-    cv2.imshow('Camera Feed', frame)
-
-    # Exit the program when 'q' is pressed
+    # الخروج عند الضغط على 'q'
     if cv2.waitKey(1) & 0xFF == ord('q'):
         break
 
-# Release the camera and close windows
+# تحرير الكاميرا وإغلاق النوافذ
 cap.release()
 cv2.destroyAllWindows()
